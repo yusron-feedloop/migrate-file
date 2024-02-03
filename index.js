@@ -5,12 +5,15 @@ const util = require('util');
 const FormData = require('form-data');
 const express = require("express");
 const cors = require('cors');
+const dotenv = require('dotenv');
 const app = express();
 const { createBullBoard } = require('@bull-board/api');
 const Worker = require('bull');
 const Queue = require('bull');
 const { BullAdapter } = require("@bull-board/api/bullAdapter");
 const { ExpressAdapter } = require("@bull-board/express");
+dotenv.config();
+
 
 // Create a new Date object
 const currentDate = new Date();
@@ -21,15 +24,15 @@ const year = currentDate.getFullYear();
 // Format the date as "d-m-y"
 const formattedDate = `${year}${month}${day}`;
 
-const qore_url = "https://staging-qore-data-balloon-233800.qore.dev"
-const qore_secret = "mwFGVaTqP71G5Hz8ABKMp44fIRzvQCfa"
+const qore_url = process.env.QORE_URL
+const qore_secret = process.env.QORE_SECRET
 
 const directoryPath = `/../Pegadaian Uploader/${formattedDate}/`; // Replace with your actual directory path
-const table = "sample_inttable"
-const column = "document"
+const table = process.env.TABLE
+const column = process.env.COLUMN
 
-const user_id = "1"
-const nama_admin = "admin1"
+const user_id = process.env.USERID
+const nama_admin = process.env.ADMIN
 
 app.use(cors());
 
