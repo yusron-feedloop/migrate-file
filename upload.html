@@ -11,6 +11,11 @@
         href="https://cdn.jsdelivr.net/npm/jquery.json-viewer@1.5.0/json-viewer/jquery.json-viewer.min.css">
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery.json-viewer@1.5.0/json-viewer/jquery.json-viewer.min.js"></script>
+    <style>
+        .bg-error{
+            background-color: #ffdddd;
+        }
+    </style>
 </head>
 <body>
     <nav class="navbar bg-success border-bottom border-body" data-bs-theme="dark">
@@ -23,9 +28,14 @@
     </nav>
     <div class="container mt-5">
         <div class="row">
+            <div class="col-md-12">
+                <div class="alert alert-success" role="alert" id="alert-folder">
+                    You will upload files in the folder : -
+                </div>
+            </div>
             <div class="col-md-8">
                 <div class="card">
-                    <div class="card-body">
+                    <div class="card-body" id="card-json">
                         <pre id="json-renderer"></pre>
                     </div>
                 </div>
@@ -49,15 +59,28 @@
             //get user
             $.get("http://localhost:8080/getUser", function (data, status) {
                 $('#user').html(data.nama_admin);
+                $('#alert-folder').html(`You will upload files in the folder : ${data.path}`);
             }).fail(function (jqXHR, textStatus, errorThrown) {
                 alert("Server not connected!!");
+                $("#btn-upload" ).prop( "disabled", true );
+                $('#json-renderer').jsonViewer({
+                    "type" : "Error",
+                    "message" : "Server not connected!!"
+                });
+                $("#card-json").addClass( "bg-error" );
+
+
             });
 
             //get folder
             $.get("http://localhost:8080/cek-folder", function (data, status) {
                 $('#json-renderer').jsonViewer(data);
+                $("#card-json").removeClass( "bg-error" );
             }).fail(function (jqXHR, textStatus, errorThrown) {
                 alert(jqXHR.responseJSON.message);
+                $('#json-renderer').jsonViewer(jqXHR.responseJSON);
+                $("#card-json").addClass( "bg-error" );
+                $("#btn-upload" ).prop( "disabled", true );
             });
 
 
