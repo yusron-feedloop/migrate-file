@@ -12,6 +12,8 @@ const Worker = require('bull');
 const Queue = require('bull');
 const { BullAdapter } = require("@bull-board/api/bullAdapter");
 const { ExpressAdapter } = require("@bull-board/express");
+const os = require('os');
+
 dotenv.config();
 
 
@@ -27,7 +29,8 @@ const formattedDate = `${year}${month}${day}`;
 const qore_url = process.env.QORE_URL
 const qore_secret = process.env.QORE_SECRET
 
-const directoryPath = `/../Pegadaian Uploader/${formattedDate}/`; // Replace with your actual directory path
+const homeDirectory = os.homedir().replace(/\\/g, '/');
+const directoryPath = `${homeDirectory}/Documents/Pegadaian Uploader/${formattedDate}/`; // Replace with your actual directory path
 const table = process.env.TABLE
 const column = process.env.COLUMN
 
@@ -69,14 +72,17 @@ app.use('/bull-board', serverAdapter.getRouter());
 
 
 app.get("/", (req, res) => {
+  const homeDirectory = os.homedir();
+  console.log('Home directory:', homeDirectory);
+
   return res.status(200).json({ message: 'Server running..' })
 })
 
 app.get("/getUser", (req, res) => {
   return res.status(200).json({
-    "user_id" : user_id,
-    "path" : directoryPath,
-    "nama_admin" : nama_admin
+    "user_id": user_id,
+    "path": directoryPath,
+    "nama_admin": nama_admin
   })
 })
 
@@ -133,7 +139,7 @@ app.get("/cek-folder", async (req, res) => {
 
       return res.status(200).json({
         folder: directoryPath,
-        total_file : totalFile,
+        total_file: totalFile,
         list: cekItem
       })
 
@@ -174,13 +180,13 @@ app.post("/proses-upload", async (req, res) => {
 
                   cekItem.push(`      - ${file}`);
 
-                  await queueUpload.add({ 
-                    "nomor" : splitNama[0],
-                    "nama" : splitNama[1],
-                    "kategori" : itemKategori,
-                    "file_name" : file,
-                    "fullPathImage" : fullPathImage
-                   });
+                  await queueUpload.add({
+                    "nomor": splitNama[0],
+                    "nama": splitNama[1],
+                    "kategori": itemKategori,
+                    "file_name": file,
+                    "fullPathImage": fullPathImage
+                  });
 
                 });
               }
@@ -364,43 +370,50 @@ const getFoldersAndFiles = async (directoryPath) => {
 queueUpload.process(async (job) => {
   const data = job.data
   console.log('Processing job with data:', data);
-  
-  //insert data
-  const insert = await execute([{
-    "operation": "Insert",
-    "instruction": {
-      "table": table,
-      "name": table,
-      "data": {
-        "nama": data.nama,
-        "nomor": data.nomor,
-        "kategori" : data.kategori,
-        "file_name" : data.file_name,
-        "created_by" : user_id,
-        "created_name" : nama_admin
+
+  try {
+
+    //insert data
+    const insert = await execute([{
+      "operation": "Insert",
+      "instruction": {
+        "table": table,
+        "name": table,
+        "data": {
+          "nama": data.nama,
+          "nip": data.nomor,
+          "kategori": data.kategori,
+          "file_name": data.file_name,
+          "created_by": user_id,
+          "created_name": nama_admin
+        }
       }
-    }
-  }]);
+    }]);
 
-  // token table
-  const tokenTable = await fileTokenTable(table, column, insert.results.sample_inttable[0].id, "write");
+    // token table
+    const tokenTable = await fileTokenTable(table, column, insert.results.file[0].id, "write");
 
-  // upload data
-  const buffer = readImageIntoBuffer(data.fullPathImage);
-  const formData = new FormData();
-  formData.append('file', buffer, { filename: data.file_name });
-  const submitPromise = util.promisify(formData.submit).bind(formData);
-  const submitOptions = {
-    host: `${qore_url}`.replace('https://', ''),
-    path: `/v1/files/upload?token=${tokenTable}`,
-    headers: {
-      'x-qore-engine-admin-secret': qore_secret,
-    },
-  };
-  const res = await submitPromise(submitOptions);
+    // upload data
+    const buffer = readImageIntoBuffer(data.fullPathImage);
+    const formData = new FormData();
+    formData.append('file', buffer, { filename: data.file_name });
+    const submitPromise = util.promisify(formData.submit).bind(formData);
+    const submitOptions = {
+      host: `${qore_url}`.replace('https://', ''),
+      path: `/v1/files/upload?token=${tokenTable}`,
+      headers: {
+        'x-qore-engine-admin-secret': qore_secret,
+      },
+    };
+    const res = await submitPromise(submitOptions);
 
-  // Perform the necessary task here
-  console.log(`Job completed with data: ${job.data}`);
+    // Perform the necessary task here
+    console.log(`Job completed with data: ${job.data}`);
+    return { success: job.data };
+  } catch (error) {
+    // Handle the error
+    return { error: error.message };
+  }
 });
 
 const worker = new Worker('uploadQueue', async job => {

@@ -96,6 +96,7 @@
                     success: function (response) {
                         $("#btn-loading").hide();
                         $("#btn-upload").show();
+                        alert("Upload Document in process...");
                     },
                     error: function (jqXHR, textStatus, errorThrown) {
                         alert("Error Upload!");
