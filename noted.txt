@@ -1,0 +1,2 @@
+http://localhost:8080/bull-board
+file:///D:/Qore%20-%20Uploader/upload.html
