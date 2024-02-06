@@ -130,13 +130,13 @@ app.post("/proses-upload", async (req, res) => {
   }
 })
 
-app.post('/add-job', async (req, res) => {
+app.get('/tes', async (req, res) => {
   const data = req.body;
-  if (!data) {
-    return res.status(400).json({ error: 'Data is required for the job.', req: req.body });
-  }
+  // if (!data) {
+  //   return res.status(400).json({ error: 'Data is required for the job.', req: req.body });
+  // }
   // Add the job to the queue
-  await queueUpload.add({ data });
+  await queueUpload.add({ nama : "testing-upload"} );
 
   return res.json({ message: 'Job added to the queue.' });
 });
@@ -227,8 +227,8 @@ const getListFileUpload = async (
       const fullPathNama = path.join(directoryPath, itemNama);
       const statsNama = fs.statSync(fullPathNama);
       if (statsNama.isDirectory()) {
-        const splitNama = itemNama.split("-");
-        cekItem.push(`Folder : '${itemNama}`);
+        const splitNama = itemNama.split("_");
+        cekItem.push(`Folder : ${itemNama}`);
 
         //folder kedua ketegori
         const folderKategori = fs.readdirSync(fullPathNama);
@@ -237,7 +237,7 @@ const getListFileUpload = async (
           const statsKategori = fs.statSync(fullPathKategori);
           if (statsKategori.isDirectory()) {
             if (category.includes(itemKategori.toLowerCase())) {
-              cekItem.push(`   Folder : '${itemKategori}`);
+              cekItem.push(`   Folder : ${itemKategori}`);
 
               const list_files = await listFilesInFolder(fullPathKategori);
               if (list_files.length > 0) {
@@ -359,6 +359,12 @@ queueUpload.process(async (job) => {
 
   try {
 
+    if(data.nama == "testing-upload"){
+      return {
+        "sukses" : "testing"
+      }
+    }
+
     //insert data
     const insert = await execute([{
       "operation": "Insert",
@@ -366,9 +372,9 @@ queueUpload.process(async (job) => {
         "table": table,
         "name": table,
         "data": {
-          "nama": data.nama,
+          "nama": data.nama.toUpperCase(),
           "nip": data.nomor,
-          "kategori": data.kategori,
+          "kategori": data.kategori.toLowerCase(),
           "file_name": data.file_name,
           "created_by": user_id,
           "created_name": nama_admin,

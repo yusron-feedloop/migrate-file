@@ -50,6 +50,9 @@
             <div class="col-md-4">
                 <button class="btn btn-success" id="btn-upload">Upload file</button>
                 <button class="btn btn-success" style="display: none;" disabled id="btn-loading">Loading..</button>
+                <div class="mt-2 text-danger" id="filezero" style="display: none;">
+                    there are no files to upload
+                </div>
                 <!-- <div class="progress mt-1">
                     <div id="progressBar" class="progress-bar-striped bg-success" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
                 </div> -->
@@ -88,6 +91,7 @@
                 //cek total data
                 if(data.total_file == 0){
                     $("#btn-upload").prop("disabled", true);
+                    $("#filezero").show();
                 }
 
                 //show folder
