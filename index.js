@@ -14,20 +14,25 @@ const { BullAdapter } = require("@bull-board/api/bullAdapter");
 const { ExpressAdapter } = require("@bull-board/express");
 const os = require('os');
 
+const { PdfCounter } = require("page-count");
+
 dotenv.config();
 
 
 // Create a new Date object
 const currentDate = new Date();
 // Get the day, month, and year
-const day = currentDate.getDate();
-const month = currentDate.getMonth() + 1; // Months are zero-indexed, so we add 1
+const day = padWithZero(currentDate.getDate());
+const month = padWithZero(currentDate.getMonth() + 1); // Months are zero-indexed, so we add 1
 const year = currentDate.getFullYear();
 // Format the date as "d-m-y"
 const formattedDate = `${year}${month}${day}`;
 
 const qore_url = process.env.QORE_URL
 const qore_secret = process.env.QORE_SECRET
+
+const category = process.env.CATEGORY.toLowerCase().split(',');
+
 
 const homeDirectory = os.homedir().replace(/\\/g, '/');
 const directoryPath = `${homeDirectory}/Documents/Pegadaian Uploader/${formattedDate}/`; // Replace with your actual directory path
@@ -39,6 +44,9 @@ const nama_admin = process.env.ADMIN
 
 app.use(cors());
 
+function padWithZero(number) {
+  return number < 10 ? `0${number}` : `${number}`;
+}
 
 // Create a Bull queue instance
 const queueUpload = new Queue('uploadQueue', {
@@ -71,138 +79,55 @@ const { addQueue, removeQueue, setQueues, replaceQueues } = createBullBoard({
 app.use('/bull-board', serverAdapter.getRouter());
 
 
-app.get("/", (req, res) => {
-  const homeDirectory = os.homedir();
-  console.log('Home directory:', homeDirectory);
-
+app.get("/", async (req, res) => {
+  //index
   return res.status(200).json({ message: 'Server running..' })
 })
 
-app.get("/getUser", (req, res) => {
-  return res.status(200).json({
-    "user_id": user_id,
-    "path": directoryPath,
-    "nama_admin": nama_admin
-  })
+app.get("/getUser", async (req, res) => {
+  const getUser = await execute([{
+    "operation": "Select",
+    "instruction": {
+      table: 'users',
+      name: 'users',
+      "condition": {
+        "$and": [
+          {
+            "id": {
+              "$eq": user_id
+            },
+          }
+        ],
+      }
+    }
+  }]);
+
+  if (getUser.results.users[0]) {
+    return res.status(200).json({
+      "user_id": user_id,
+      "path": directoryPath,
+      "nama_admin": getUser.results.users[0].nama
+    })
+  }
 })
 
 app.get("/cek-folder", async (req, res) => {
+  const result = await getListFileUpload(false);
 
-  fs.access(directoryPath, fs.constants.F_OK, (err) => {
-    if (err) {
-      return res.status(400).json({
-        message: `Folder does not exist at path: ${directoryPath}`,
-        type: "Error"
-      })
-    } else {
-
-      const cekItem = []
-      let totalFile = 0;
-      //folder pertama nama
-      const foldernama = fs.readdirSync(directoryPath);
-      foldernama.forEach(async itemNama => {
-        const fullPathNama = path.join(directoryPath, itemNama);
-        const statsNama = fs.statSync(fullPathNama);
-        if (statsNama.isDirectory()) {
-          const splitNama = itemNama.split("-");
-          cekItem.push(`Folder : '${itemNama}`);
-          //folder kedua ketegori
-          const folderKategori = fs.readdirSync(fullPathNama);
-          folderKategori.forEach(async itemKategori => {
-            const fullPathKategori = path.join(fullPathNama, itemKategori);
-            const statsKategori = fs.statSync(fullPathKategori);
-            if (statsKategori.isDirectory()) {
-              cekItem.push(`   Folder : '${itemKategori}`);
-              const list_files = listFilesInFolder(fullPathKategori);
-              if (list_files.length > 0) {
-                list_files.forEach(async file => {
-                  const fullPathImage = path.join(fullPathKategori, file);
-
-                  cekItem.push(`      - ${file}`);
-                  totalFile += 1;
-
-                  // await queueUpload.add({ 
-                  //   "nomor" : splitNama[0],
-                  //   "nama" : splitNama[1],
-                  //   "kategori" : itemKategori,
-                  //   "file_name" : file,
-                  //   "fullPathImage" : fullPathImage
-                  //  });
-
-                });
-              }
-            }
-          });
-        }
-
-      });
-
-      return res.status(200).json({
-        folder: directoryPath,
-        total_file: totalFile,
-        list: cekItem
-      })
-
-    }
-  })
+  if (result.statusCode == 200) {
+    res.status(200).json(result)
+  } else {
+    res.status(400).json(result)
+  }
 });
 
 app.post("/proses-upload", async (req, res) => {
-
-  fs.access(directoryPath, fs.constants.F_OK, (err) => {
-    if (err) {
-      return res.status(400).json({
-        message: `Folder does not exist at path: ${directoryPath}`,
-        type: "Error"
-      })
-    } else {
-
-      const cekItem = []
-      //folder pertama nama
-      const foldernama = fs.readdirSync(directoryPath);
-      foldernama.forEach(async itemNama => {
-        const fullPathNama = path.join(directoryPath, itemNama);
-        const statsNama = fs.statSync(fullPathNama);
-        if (statsNama.isDirectory()) {
-          const splitNama = itemNama.split("-");
-          cekItem.push(`Folder : '${itemNama}`);
-          //folder kedua ketegori
-          const folderKategori = fs.readdirSync(fullPathNama);
-          folderKategori.forEach(async itemKategori => {
-            const fullPathKategori = path.join(fullPathNama, itemKategori);
-            const statsKategori = fs.statSync(fullPathKategori);
-            if (statsKategori.isDirectory()) {
-              cekItem.push(`   Folder : '${itemKategori}`);
-              const list_files = listFilesInFolder(fullPathKategori);
-              if (list_files.length > 0) {
-                list_files.forEach(async file => {
-                  const fullPathImage = path.join(fullPathKategori, file);
-
-                  cekItem.push(`      - ${file}`);
-
-                  await queueUpload.add({
-                    "nomor": splitNama[0],
-                    "nama": splitNama[1],
-                    "kategori": itemKategori,
-                    "file_name": file,
-                    "fullPathImage": fullPathImage
-                  });
-
-                });
-              }
-            }
-          });
-        }
-
-      });
-
-      return res.status(200).json({
-        folder: directoryPath,
-        list: cekItem
-      })
-
-    }
-  })
+  const result = await getListFileUpload(true);
+  if (result.statusCode == 200) {
+    res.status(200).json(result)
+  } else {
+    res.status(400).json(result)
+  }
 })
 
 app.post('/add-job', async (req, res) => {
@@ -261,7 +186,8 @@ const fileTokenTable = async (
 };
 
 // Function to get a list of folders and files inside a directory
-function listFilesInFolder(folderPath) {
+
+const listFilesInFolder = async (folderPath) => {
   try {
     let fileArray = []
     const files = fs.readdirSync(folderPath);
@@ -282,6 +208,122 @@ function listFilesInFolder(folderPath) {
   }
 }
 
+const getListFileUpload = async (
+  sendQue = false
+) => {
+
+  try {
+    // Check if the directory exists
+    fs.statSync(directoryPath, fs.constants.F_OK);
+
+    const cekItem = []
+    const errorList = []
+    let totalFile = 0;
+    let totalPage = 0;
+
+    //folder pertama nama
+    const foldernama = fs.readdirSync(directoryPath);
+    for (const itemNama of foldernama) {
+      const fullPathNama = path.join(directoryPath, itemNama);
+      const statsNama = fs.statSync(fullPathNama);
+      if (statsNama.isDirectory()) {
+        const splitNama = itemNama.split("-");
+        cekItem.push(`Folder : '${itemNama}`);
+
+        //folder kedua ketegori
+        const folderKategori = fs.readdirSync(fullPathNama);
+        for (const itemKategori of folderKategori) {
+          const fullPathKategori = path.join(fullPathNama, itemKategori);
+          const statsKategori = fs.statSync(fullPathKategori);
+          if (statsKategori.isDirectory()) {
+            if (category.includes(itemKategori.toLowerCase())) {
+              cekItem.push(`   Folder : '${itemKategori}`);
+
+              const list_files = await listFilesInFolder(fullPathKategori);
+              if (list_files.length > 0) {
+                for (const file of list_files) {
+                  if (!file.includes("(success)")) {
+                    const fullPathImage = path.join(fullPathKategori, file);
+
+                    const page = await countPages(fullPathImage);
+
+                    cekItem.push(`      - ${file} (${page} Pages)`);
+
+                    totalFile += 1
+
+                    if (sendQue == true) {
+                      await queueUpload.add({
+                        "nomor": splitNama[0],
+                        "nama": splitNama[1],
+                        "kategori": itemKategori,
+                        "file_name": file,
+                        "fullPathImage": fullPathImage,
+                        "page": page
+                      });
+                    }
+                  }
+                };
+              }
+            } else {
+              errorList.push(`Invalid Category '${itemKategori}' in ${fullPathKategori}`);
+            }
+
+          }
+        };
+      }
+
+    };
+
+    return {
+      folder: directoryPath,
+      list: cekItem,
+      total_file: totalFile,
+      error: errorList,
+      statusCode: 200
+    }
+
+
+  } catch (error) {
+    // If an error occurs, the directory does not exist
+    if (error.code === 'ENOENT') {
+      return {
+        message: `Folder does not exist at path: ${directoryPath}`,
+        type: "Error",
+        statusCode: 400
+      }
+    }
+    // Handle other errors if needed
+    throw error;
+  }
+}
+
+const countPages = async (
+  pathFile
+) => {
+  try {
+
+    const pdfBuffer = fs.readFileSync(pathFile);
+
+    if (isPDF(pdfBuffer)) {
+
+      const pagesPdf = await PdfCounter.count(pdfBuffer);
+      return pagesPdf
+    } else {
+      return 1
+    }
+
+
+  } catch (error) {
+    throw new Error(`Error counting pages: ${error.message}`);
+  }
+}
+
+
+function isPDF(buffer) {
+  // Check if the file starts with the PDF signature ("%PDF")
+  return buffer.toString('utf-8', 0, 4) === '%PDF';
+}
+
 function readImageIntoBuffer(filePath) {
   try {
     const buffer = fs.readFileSync(filePath);
@@ -292,79 +334,23 @@ function readImageIntoBuffer(filePath) {
   }
 }
 
-
-const getFoldersAndFiles = async (directoryPath) => {
+const renameFileWithPrefix = async (
+  oldFilePath
+) => {
   try {
-    const items = fs.readdirSync(directoryPath);
+    const directory = path.dirname(oldFilePath);
+    const fileName = path.basename(oldFilePath, path.extname(oldFilePath));
+    const fileExtension = path.extname(oldFilePath);
+    const newFileName = `${fileName} (success)${fileExtension}`;
+    const newFilePath = path.join(directory, newFileName);
 
-    const folders = [];
-    const files = [];
+    fs.renameSync(oldFilePath, newFilePath);
 
-    items.forEach(async item => {
-      const fullPath = path.join(directoryPath, item);
-      const stats = fs.statSync(fullPath);
-
-      if (stats.isDirectory()) {
-        folders.push(item);
-        const list_files = listFilesInFolder(fullPath);
-        if (list_files.length > 0) {
-          console.log('Files in the folder:', item);
-
-          list_files.forEach(async file => {
-            const fullPathImage = path.join(fullPath, file);
-            const buffer = readImageIntoBuffer(fullPathImage);
-            console.log("-", fullPathImage);
-
-            // insert data
-            // const insert = await execute([{
-            //   "operation": "Insert",
-            //   "instruction": {
-            //     "table": "sample_inttable",
-            //     "name": "sample_inttable",
-            //     "data": {
-            //       "name": item,
-            //       "description": file
-            //     }
-            //   }
-            // }]);
-
-            //token table
-            // const tokenTable = await fileTokenTable("sample_inttable", "document", insert.results.sample_inttable[0].id, "write");
-
-            //upload data
-            // const formData = new FormData();
-            // formData.append('file', buffer, {filename: file});
-            // const submitPromise = util.promisify(formData.submit).bind(formData);
-            // const submitOptions = {
-            //   host: `${qore_url}`.replace('https://', ''),
-            //   path: `/v1/files/upload?token=${tokenTable}`,
-            //   headers: {
-            //     'x-qore-engine-admin-secret': qore_secret,
-            //   },
-            // };
-            // const res = await submitPromise(submitOptions);
-
-            // if (Number(`${res.statusCode}`) >= 400) {
-            //   throw new Error('Upload file failed');
-            // }
-
-            // return res;
-
-          });
-        } else {
-          console.log('No files found in the folder.');
-        }
-      }
-
-    });
-
-    return { folders, files };
+    return newFilePath;
   } catch (error) {
-    console.error('Error reading directory:', error.message);
-    return { folders: [], files: [] };
+    throw error;
   }
 }
-
 
 // Start the Bull worker process
 queueUpload.process(async (job) => {
@@ -385,7 +371,8 @@ queueUpload.process(async (job) => {
           "kategori": data.kategori,
           "file_name": data.file_name,
           "created_by": user_id,
-          "created_name": nama_admin
+          "created_name": nama_admin,
+          "page": data.page
         }
       }
     }]);
@@ -407,29 +394,19 @@ queueUpload.process(async (job) => {
     };
     const res = await submitPromise(submitOptions);
 
+    //rename file
+    if (res) {
+      await renameFileWithPrefix(data.fullPathImage);
+    }
+
     // Perform the necessary task here
-    console.log(`Job completed with data: ${job.data}`);
-    return { success: job.data };
+    console.log(`Job completed with data: ${data.fullPathImage}`);
+    return { success: data };
   } catch (error) {
     // Handle the error
     return { error: error.message };
   }
 });
 
-const worker = new Worker('uploadQueue', async job => {
-  // This is the job processing logic
-  console.log(`Processing job with data: ${job.data}`);
-  // Simulate some async task
-  await new Promise(resolve => setTimeout(resolve, 2000));
-  return `Job completed with data: ${job.data}`;
-});
-
-worker.on('completed', job => {
-  console.log(`Job ID ${job.id} has completed with result: ${job.returnvalue}`);
-});
-
-worker.on('failed', (job, err) => {
-  console.error(`Job ID ${job.id} has failed with error: ${err.message}`);
-});
 
 exports.main = app;
